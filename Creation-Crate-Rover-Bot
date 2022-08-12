@@ -1,0 +1,222 @@
+/*
+  Creation Crate DIY Rover Bot!
+  This is an obstacle avoidance rover. It works by using ultrasonic obstacle/distance sensor. 
+  Similar to a bat's echolocation ability, it can detect object by bouncing a signal off of them.
+  The rover will move forward if there is no obstacle within 25cm. Once an object is detected, it 
+  will turn right until the coast is clear and keep on truckin'.
+  
+  Components Required
+  1. UNO R3 Microcontroller
+  2. DC Motor Driver L298N
+  3. HC-SR04 Ultrasonic Distance sensor
+
+  The circuit:
+    Right Motor 1: Positive to Out1, negative to Out2
+    Left Motor 2: Positive to Out3, negative to Out4
+    Driver Board control: ENA - 3 | IN1 - 8 | IN2 - 7 | IN3 - 5 | IN4 - 4 | ENB - 6
+    Ultrasonic Sensor: TRIG - A4 | ECHO - A5
+
+  Inputs and Motor Movement
+  
+  ################################
+  # IN1  # IN2  # MOTOR          #
+  ################################
+  # LOW  # LOW  # STOP           #
+  # LOW  # HIGH # CLOCKWISE      #
+  # HIGH # LOW  # COUNTER-CW     #
+  # HIGH # HIGH # STOP           #
+  ################################
+  
+  Motor & Rover Movement
+  
+  ###########################################################
+  # LEFT MOTOR 1       # RIGHT MOTOR 2     # ROVER MOVEMENT #
+  ###########################################################
+  # CLOCKWISE          # CLOCKWISE         # FORWARD        #
+  # COUNTER CLOCKWISE  # COUNTER CLOCKWISE # BACKWARD       #
+  # CLOCKWISE          # COUNTER CLOCKWISE # TURNS LEFT     #
+  # COUNTER CLOCKWISE  # CLOCKWISE         # TURNS RIGHT    #
+  # OFF (RELEASE)      # OFF (RELEASE)     # STOP           #
+  ###########################################################
+
+  Functions
+  As discussed in the last project, functions are usually created for tasks that are needed 
+  throughout the program so we don't have to write the same instructions over and over.
+    roverStop, roverForward, roverReverse, roverLeft, & roverRight - directional commands
+    getUltrasonicDistance - returns ultrasonic distance in centimeters  
+
+  ULTRASONIC
+  Here we are using ultrasonic distance sensor to find distance of obstacle.
+  Basically this sensor has a transmitter and a receiver.
+  1. Upon TRIGGER transmitter sends ULTRASONIC BURST 
+  2. ULTRASONIC waves will hit the obstacle and reflect back
+  3. Receiver in the sensor will sense the reflected signals and calculate time
+  4. Remember the famous equation: distance = speed * time, speed of ultrasonic signals is same 
+      as of sound signals, thus we can calculate the distance based on it. 
+
+  Created 08.01.18
+  By Ligo George & David Hehman
+  http://creationcrate.com/
+ */
+
+#define ULTRASONIC_TRIG A4 // define the pins of your sensor, Trigger pin is connected to A4 (some older versions are A0)
+#define ULTRASONIC_ECHO A5 // Echo pin is connected to A5 (Some older versions are A1)
+
+#define MOTOR1_EN       3   //ENA of driver board
+#define MOTOR1_POSITIVE 4   //IN4 of driver board
+#define MOTOR1_NEGATIVE 5   //IN3 of driver board
+#define MOTOR2_POSITIVE 7   //IN2 of driver board
+#define MOTOR2_NEGATIVE 8   //IN1 of driver baord
+#define MOTOR2_EN       6   //ENB of driver board 
+
+const int DISTANCE_TO_TURN = 35; // rover will turn if an obstacle detected in this range in centimeters
+
+/* -- setup() function will initialize everything before starting the rover function.
+  1. Initializing serial module for logging, it will print status in the serial monitor
+  2. Initializing pins to connect Ultrasonic sensor pins TRIGGER and ECO
+  3. Setting rover speed and stop the rover initially -- */
+ 
+void setup() 
+{
+  delay (1000);
+  Serial.begin(9600);                 // begin serial communitication  with a baud rate (speed) of 9600
+  Serial.println("Motor test!");
+  
+  pinMode(ULTRASONIC_TRIG, OUTPUT);   // set the trig pin to output (Send sound waves)
+  pinMode(ULTRASONIC_ECHO, INPUT);    // set the echo pin to input (receive sound waves)
+
+  //Setting all motor pins as output
+  pinMode(MOTOR1_POSITIVE, OUTPUT);
+  pinMode(MOTOR1_NEGATIVE, OUTPUT);
+  pinMode(MOTOR2_POSITIVE, OUTPUT);
+  pinMode(MOTOR2_NEGATIVE, OUTPUT);
+  pinMode(MOTOR1_EN,       OUTPUT);
+  pinMode(MOTOR2_EN,       OUTPUT);
+  
+  roverSpeed(250);
+  roverStop();
+}
+
+/* -- loop() function is infinitely executing function until the power is switched off. -- */
+ 
+void loop() {
+  long distance;                        //Declair the variable 'distance'
+  distance = getUltrasonicDistance();   //Calls the FUNCTION: getUltrasonicDistance and return a value to 'distance' variable
+  
+  /* -- Controlling the bot -- */
+  if (distance < DISTANCE_TO_TURN)      // If the 'distance' returned is less than 35cm, then...
+  {
+    roverReverse();                     // call the FUNCTION: roverReverse - back up
+        delay(1000);                    // for 1000 milliseconds (one second)
+    roverRight();                       // call the FUNCTION: roverRight - turn right
+        delay(500);                     // for 500 milliseconds (1/2 of a second)
+
+    /* -- These commands will print to the serial monitor so we can see what the rover is detecting -- */
+    Serial.println ("Close Obstacle detected!" );
+    Serial.println ("Obstacle Details:");
+    Serial.print ("Distance From rover is " );
+    Serial.print ( distance);
+    Serial.print ( " CM!");             // print out the distance in centimeters.
+    Serial.println (" The obstacle is declared a threat due to close distance. ");
+    Serial.println (" Turning !");
+
+  }
+  else                                  // otherwise...
+  {
+    roverForward();                     //...continue traveling forward
+    Serial.println ("No obstacle detected. going forward");
+    delay (15); 
+  }  
+}
+
+/* -- FUNCTION: roverSpeed(speed) - This function is used to set the speed of motors. It internally works 
+ using PWM and Duty Cycle concept. Input argument range is 0 to 255. That means 0 means 0 speed and 255 
+ means 100% speed. -- */
+void roverSpeed(int speed) 
+{ 
+  analogWrite(MOTOR1_EN, speed);    //Writing PWM duty cycle to set speed
+  analogWrite(MOTOR2_EN, speed);    //Writing PWM duty cycle to set speed
+}
+
+/* -- FUNCTION: roverStop - stops the rover. 
+   Currently it is not used in this program, but you can use it for your future experiments. -- */
+ 
+void roverStop() 
+{
+  //Motor 1 Stop
+  digitalWrite(MOTOR1_POSITIVE, LOW);
+  digitalWrite(MOTOR1_NEGATIVE, LOW);
+
+  //Motor 2 Stop
+  digitalWrite(MOTOR2_POSITIVE, LOW);
+  digitalWrite(MOTOR2_NEGATIVE, LOW);
+}
+
+/* -- FUNCTION: roverForward - both motors rotate forward -- */
+void roverForward() 
+{
+  //Motor 1 Clockwise
+  digitalWrite(MOTOR1_POSITIVE, HIGH);
+  digitalWrite(MOTOR1_NEGATIVE, LOW);
+
+  //Motor 2 Clockwise
+  digitalWrite(MOTOR2_POSITIVE, HIGH);
+  digitalWrite(MOTOR2_NEGATIVE, LOW);
+}
+
+/* -- FUNCTION: roverReverse - both motors rotate backward -- */
+void roverReverse() 
+{
+  //Motor 1 Anti clockwise
+  digitalWrite(MOTOR1_POSITIVE, LOW);
+  digitalWrite(MOTOR1_NEGATIVE, HIGH);
+
+  //Motor 2 Anti clockwise
+  digitalWrite(MOTOR2_POSITIVE, LOW);
+  digitalWrite(MOTOR2_NEGATIVE, HIGH);
+}
+
+/* -- FUNCTION: roverRight - left motor forward, right motor backward. -- */
+void roverRight() 
+{
+  //Motor 1 Clockwise
+  digitalWrite(MOTOR1_POSITIVE, HIGH);
+  digitalWrite(MOTOR1_NEGATIVE, LOW);
+
+  //Motor 2 Anti clockwise
+  digitalWrite(MOTOR2_POSITIVE, LOW);
+  digitalWrite(MOTOR2_NEGATIVE, HIGH);
+}
+
+/* -- FUNTION: roverLeft - left motor backward, right motor forward. 
+   Currently it is not used in this program, but you can use it for your future experiments. -- */
+void roverLeft() 
+{
+  //Motor 1 Anti clockwise
+  digitalWrite(MOTOR1_POSITIVE, LOW);
+  digitalWrite(MOTOR1_NEGATIVE, HIGH);
+
+  //Motor 2 Clockwise
+  digitalWrite(MOTOR2_POSITIVE, HIGH);
+  digitalWrite(MOTOR2_NEGATIVE, LOW);
+}
+
+/* -- FUNTION: getUltrasonicDistance - This function returns ultrasonic distance in centimeters -- */
+long getUltrasonicDistance()
+{
+   long duration;     // define variable 'duration'  - used to save time gap between trigger and echo
+   long distance;     // define variable 'distance'  - used to calculate and convert the distance.
+
+  /* -- Sending TRIGGER to send ULTROSONIC BURST -- */
+  digitalWrite(ULTRASONIC_TRIG, LOW);  
+  delayMicroseconds(2); // delays are required for a successful sensor operation.
+  digitalWrite(ULTRASONIC_TRIG, HIGH);
+  delayMicroseconds(10); //this delay is required as well!
+  digitalWrite(ULTRASONIC_TRIG, LOW);
+
+  /* -- Reading Time period required to get the ECHO and calculating distance in centimeters -- */
+  duration = pulseIn(ULTRASONIC_ECHO, HIGH);
+  distance = (duration/2) / 29.1;
+
+  return distance;
+}
